@@ -1,11 +1,18 @@
+
+require("dotenv").config();
+
 const hre = require("hardhat");
 
 async function main() {
-    // Replace this with the address of your already deployed ERC20 token
-    const tokenAddress = "0x2279B7A0a67DB372996a5FaB50D91eAA73d2eBe6"; // Update this with your token address
-    const ownerAddress = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"; // Replace this with the address of the owner (can be your wallet address)
+    // Specific addresses for existing contracts
+    const tokenAddress =  process.env.TOKEN_ADDRESS;
+    const ownerAddress = process.env.ADMIN_ADDRESS;
 
-    // Deploy the IndividualRewardSystem contract
+    // Check if the token is already deployed
+    const MyToken = await hre.ethers.getContractAt("MyToken", tokenAddress);
+    console.log("MyToken already deployed at:", MyToken.address);
+
+    // Deploy the IndividualRewardSystem contract using the existing token address
     const IndividualRewardSystem = await hre.ethers.getContractFactory("IndividualRewardSystem");
     const rewardSystem = await IndividualRewardSystem.deploy(tokenAddress, ownerAddress); // Pass both token and owner address
 

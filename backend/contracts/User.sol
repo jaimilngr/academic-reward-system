@@ -12,8 +12,8 @@ contract User {
         return msg.sender; // Return the address of the caller
     }
 
-    // Function to get the token balance of the user for a specific ERC20 token
-    function getTokenBalance(address tokenAddress) public view returns (uint256) {
-        return IERC20(tokenAddress).balanceOf(msg.sender); // Get the balance from the ERC20 token contract
+    // Function to get the token balance of a specified user for a specific ERC20 token
+    function getTokenBalance(address tokenAddress, address userAddress) public view returns (uint256) {
+        return IERC20(tokenAddress).balanceOf(userAddress); // Get the balance from the ERC20 token contract for the specified user
     }
 }

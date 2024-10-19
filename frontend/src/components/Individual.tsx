@@ -11,8 +11,8 @@ const IndividualReward: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(false);
   const navigate = useNavigate();
 
-  const tokenAddress = '0x2279B7A0a67DB372996a5FaB50D91eAA73d2eBe6'; 
-  const rewardSystemAddress = '0x0B306BF915C4d645ff596e518fAf3F9669b97016'; 
+  const tokenAddress = import.meta.env.VITE_TOKEN_ADDRESS || "";
+  const rewardSystemAddress = import.meta.env.VITE_INDIVIDUALREWARD_ADDRESS || "";
   
   const tokenABI = [
     "function transfer(address to, uint256 amount) public returns (bool)",

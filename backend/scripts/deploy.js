@@ -1,8 +1,10 @@
+require("dotenv").config();
+
 const hre = require("hardhat");
 
 async function main() {
-    const initialSupply = hre.ethers.utils.parseUnits("1000000", 18); // Convert to smallest unit (1,000,000 tokens with 18 decimals)
-    const ownerAddress = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"; // Replace with the actual owner's address
+    const initialSupply = hre.ethers.utils.parseUnits("100000", 18); // Convert to smallest unit (1,000,000 tokens with 18 decimals)
+    const ownerAddress = process.env.ADMIN_ADDRESS;
 
     // Deploy MyToken contract
     const MyToken = await hre.ethers.getContractFactory("MyToken");
@@ -19,6 +21,7 @@ async function main() {
     console.log("User contract deployed to:", userContract.address);
 }
 
+// Execute the main function and handle errors
 main()
     .then(() => process.exit(0))
     .catch((error) => {

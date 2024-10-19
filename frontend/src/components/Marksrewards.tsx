@@ -1,59 +1,106 @@
-import React, { useState } from 'react'; 
+import React, { useState } from 'react';
 import { read, utils } from 'xlsx';
 import { GradientBackground } from './ui/GradientBackground';
 import { useNavigate } from 'react-router-dom';
+import { ethers } from 'ethers';
 
+// Interface for student data
 interface StudentData {
   Student: string;
   Address: string;
   Marks: number; // Adjust this type if necessary
 }
+
 // Main Component
 const MarksReward: React.FC = () => {
-  const [data, setData] = useState<StudentData[]>([]); 
+  const [data, setData] = useState<StudentData[]>([]);
   const [tokens, setTokens] = useState<number[]>([]);
   const [error, setError] = useState<string>('');
   const [isAllocated, setIsAllocated] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [message, setMessage] = useState<string | null>(null);
   const navigate = useNavigate();
 
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
+  const tokenAddress = import.meta.env.VITE_TOKEN_ADDRESS || "";
+  const rewardSystemAddress = import.meta.env.VITE_INDIVIDUALREWARD_ADDRESS || ""; // Use the correct address for MarksReward
 
-    if (file && !file.name.endsWith('.xlsx')) {
-      setError('Please upload a valid .xlsx file.');
-      setData([]);
+  const tokenABI = [
+    "function transfer(address to, uint256 amount) public returns (bool)",
+    "function balanceOf(address owner) public view returns (uint256)"
+  ];
+
+  const rewardSystemABI = [
+    "function distributeRewardsInBatch(address[] recipients, uint256[] amounts) external", // Update to match the contract
+    "function contractBalance() external view returns (uint256)"
+  ];
+
+  // Handle file upload
+const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const file = event.target.files?.[0];
+
+  if (file) {
+    // Clear existing data, tokens, error, and message before processing a new file
+    setData([]);
+    setTokens([]);
+    setError('');
+    setMessage(null);
+    setIsAllocated(false);
+
+    if (!file.name.endsWith('.xlsx')) {
+      setError('Invalid file type. Please upload an Excel (.xlsx) file.');
       return;
     }
 
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const binaryStr = e.target?.result;
-        const workbook = read(binaryStr, { type: 'binary' });
-        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-        const sheetData = utils.sheet_to_json<StudentData>(firstSheet); 
-        const requiredColumns = ['Student', 'Address', 'Marks'];
-        const headers = Object.keys(sheetData[0] as StudentData); 
-        const missingColumns = requiredColumns.filter(col => !headers.includes(col));
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const result = e.target?.result as ArrayBuffer;
+      if (result) {
+        processFile(result); // Pass the result to your process function
+      } else {
+        setError('Error reading file. Please try again.');
+      }
+    };
+    reader.readAsArrayBuffer(file); // Read the file as ArrayBuffer
+  }
+};
 
-        if (missingColumns.length > 0) {
-          setError(`The file must contain the following columns: ${missingColumns.join(', ')}`);
-          setData([]);
-          return;
-        }
+// Process the file and update the state to show new data
+const processFile = (binaryStr: ArrayBuffer | null) => {
+  const workbook = read(binaryStr, { type: 'array' });
+  const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+  const sheetData = utils.sheet_to_json<StudentData>(firstSheet);
 
-        setData(sheetData);
-        calculateTokens(sheetData);
-        setError('');
-      };
-      reader.readAsBinaryString(file);
-    }
-  };
+  const requiredColumns = ['Student', 'Address', 'Marks'];
+  const headers = Object.keys(sheetData[0] as StudentData);
+  const missingColumns = requiredColumns.filter(col => !headers.includes(col));
 
-  const calculateTokens = (marksData: any[]) => {
-    const tokenValues = marksData.map((row: any) => {
-      const marks = row['Marks'];
-      if (marks === undefined || marks === null || isNaN(marks)) return 0;
+  if (missingColumns.length > 0) {
+    setError('Error occurred. Missing required columns.');
+    setData([]);
+    return;
+  }
+
+  // Validate rows for missing Address or Marks
+  const invalidRows = sheetData.filter(student => {
+    return !student.Address || student.Marks == null || isNaN(student.Marks);
+  });
+
+  if (invalidRows.length > 0) {
+    setError('Some rows have missing or invalid Address or Marks.');
+    setData([]); // Prevent further processing if invalid
+    return;
+  }
+
+  // If validation passes, update state with new data
+  setData(sheetData);
+  calculateTokens(sheetData); // Recalculate tokens for new data
+  setError('');
+};
+  // Calculate token allocations based on marks
+  const calculateTokens = (marksData: StudentData[]) => {
+    const tokenValues = marksData.map(row => {
+      const marks = row.Marks;
+      if (typeof marks !== 'number' || isNaN(marks)) return 0;
       if (marks >= 36) return 10;
       if (marks >= 30) return 7;
       if (marks >= 20) return 5;
@@ -62,20 +109,67 @@ const MarksReward: React.FC = () => {
     setTokens(tokenValues);
   };
 
-  const allocateTokens = () => {
-    if (data.length === 0 || tokens.length === 0) {
-      setError('No data available to allocate tokens.');
+  // Handle token distribution
+  const handleDistributeReward = async () => {
+    const recipientAddresses = data.map(student => student.Address);
+    const amountsToDistribute = tokens;
+
+    if (recipientAddresses.length === 0 || amountsToDistribute.length === 0) {
+      setMessage('No recipients or token amounts to distribute.');
       return;
     }
 
-    data.forEach((row, index) => {
-      const address = row['Address'];
-      const tokenAmount = tokens[index];
-      console.log(`Allocating ${tokenAmount} tokens to address: ${address}`);
-    });
+    for (const addr of recipientAddresses) {
+      if (!ethers.isAddress(addr)) {
+        setMessage(`Invalid recipient address: ${addr}`);
+        return;
+      }
+    }
 
-    setIsAllocated(true);
-    setError('');
+    if (typeof window.ethereum === 'undefined') {
+      setMessage('Please install MetaMask to use this feature.');
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const tokenContract = new ethers.Contract(tokenAddress, tokenABI, signer);
+      const senderAddress = await signer.getAddress();
+      const balance = await tokenContract.balanceOf(senderAddress);
+
+      // Calculate total tokens to distribute
+      const totalTokensToDistribute = amountsToDistribute.reduce((a, b) => a + b, 0);
+      if (Number(balance) < totalTokensToDistribute) {
+        setMessage('Insufficient balance to distribute the specified amount.');
+        return;
+      }
+
+      const rewardSystemContract = new ethers.Contract(rewardSystemAddress, rewardSystemABI, signer);
+      const contractBalance = await rewardSystemContract.contractBalance();
+      console.log(`Contract Balance: ${ethers.formatUnits(contractBalance, 18)} tokens`);
+
+      // Transfer tokens to the reward system contract
+      const tx = await tokenContract.transfer(rewardSystemAddress, ethers.parseUnits(totalTokensToDistribute.toString(), 18));
+      await tx.wait();
+      console.log(`Transferred ${totalTokensToDistribute} tokens to the reward system contract.`);
+
+      // Now distribute the tokens to the recipients in batch
+      const distributeTx = await rewardSystemContract.distributeRewardsInBatch(recipientAddresses, amountsToDistribute.map(amount => ethers.parseUnits(amount.toString(), 18)));
+      await distributeTx.wait();
+
+      setMessage(`Successfully distributed tokens to ${recipientAddresses.length} recipients`);
+
+      // Reset inputs
+      setIsAllocated(true);
+    } catch (error: any) {
+      console.error("Distribution failed:", error);
+      setMessage(`An error occurred. Please try again.`);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -107,38 +201,34 @@ const MarksReward: React.FC = () => {
                 />
                 <div className="flex items-center justify-center w-full h-12 bg-gray-700 rounded-lg border border-gray-500 cursor-pointer hover:bg-gray-600 transition duration-200">
                   {/* SVG Icon for File Upload */}
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5 text-white">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="m18.375 12.739-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 0 0 2.112 2.13" />
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 16v2a4 4 0 004 4h10a4 4 0 004-4v-2M12 12v-9m0 0L8 7m4-4l4 4" />
                   </svg>
-                  <span className="text-white ml-2">Choose a file</span>
+                  <span className="ml-2">Upload Marks File</span>
                 </div>
               </label>
+              {error && <p className="text-red-500 text-center">{error}</p>}
             </div>
 
-            {/* Error Message */}
-            {error && (
-              <p className="text-red-500 text-center mb-4">{error}</p>
-            )}
-
-            {/* Display Uploaded Data */}
+            {/* Display Data in Table */}
             {data.length > 0 && (
-              <div className="overflow-auto h-64 mb-6">
-                <table className="table-auto w-full text-white">
+              <div className="overflow-x-auto">
+                <table className="min-w-full bg-gray-800 rounded-lg shadow-lg">
                   <thead>
-                    <tr>
+                    <tr className="bg-gray-700 text-gray-300">
                       <th className="px-4 py-2">Student</th>
                       <th className="px-4 py-2">Address</th>
                       <th className="px-4 py-2">Marks</th>
                       <th className="px-4 py-2">Tokens</th>
                     </tr>
                   </thead>
-                  <tbody>
-                    {data.map((row: any, index: number) => (
-                      <tr key={index} className="text-center">
-                        <td className="border px-4 py-2">{row['Student']}</td>
-                        <td className="border px-4 py-2">{row['Address']}</td>
-                        <td className="border px-4 py-2">{row['Marks'] !== undefined ? row['Marks'] : 'N/A'}</td>
-                        <td className="border px-4 py-2">{tokens[index]}</td>
+                  <tbody className="text-gray-400">
+                    {data.map((student, index) => (
+                      <tr key={index} className="border-b border-gray-600 hover:bg-gray-700">
+                        <td className="px-4 py-2">{student.Student}</td>
+                        <td className="px-4 py-2">{student.Address}</td>
+                        <td className="px-4 py-2">{student.Marks}</td>
+                        <td className="px-4 py-2">{tokens[index]}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -146,19 +236,19 @@ const MarksReward: React.FC = () => {
               </div>
             )}
 
-            {/* Allocate Tokens Button */}
-            <div className="flex justify-center mb-6">
+            {/* Distribute Rewards Button */}
+            <div className="mt-6">
               <button
-                onClick={allocateTokens}
-                className="px-4 py-2 bg-green-600 text-white rounded-lg shadow hover:bg-green-500 transition">
-                Allocate Tokens
+                onClick={handleDistributeReward}
+                disabled={data.length === 0}
+                className={`w-full h-12 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-500 transition duration-200 ease-in-out ${data.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
+              >
+                {isLoading ? 'Distributing...' : 'Distribute Rewards'}
               </button>
             </div>
 
-            {/* Allocation Status */}
-            {isAllocated && (
-              <p className="text-green-500 text-center">Tokens have been successfully allocated!</p>
-            )}
+            {/* Display message */}
+            {message && <p className="mt-4 text-center text-gray-300">{message}</p>}
           </div>
         </div>
       </GradientBackground>
