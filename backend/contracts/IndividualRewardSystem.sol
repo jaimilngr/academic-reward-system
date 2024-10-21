@@ -25,7 +25,7 @@ contract IndividualRewardSystem {
     }
     
     // Function to distribute rewards to a user
-    function distributeReward(address recipient, uint256 amount) external onlyOwner {
+    function distributeReward(address recipient, uint256 amount) external  {
         uint256 availableBalance = token.balanceOf(address(this)); // Renamed variable
         emit ContractBalanceChecked(availableBalance); // Emit current balance
 

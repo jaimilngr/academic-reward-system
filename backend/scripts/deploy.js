@@ -3,7 +3,7 @@ require("dotenv").config();
 const hre = require("hardhat");
 
 async function main() {
-    const initialSupply = hre.ethers.utils.parseUnits("100000", 18); // Convert to smallest unit (1,000,000 tokens with 18 decimals)
+    const initialSupply = hre.ethers.utils.parseUnits("1000000", 18); // Convert to smallest unit (1,000,000 tokens with 18 decimals)
     const ownerAddress = process.env.ADMIN_ADDRESS;
 
     // Deploy MyToken contract

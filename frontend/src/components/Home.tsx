@@ -194,24 +194,15 @@ const Home: React.FC = () => {
                     {balance} {tokenSymbol}
                   </p>
                 </div>
-                {/* Role-specific Button */}
-                <div className="mt-6">
-                  {isAdmin ? (
-                    <button
-                      onClick={() => setIsModalOpen(true)}
-                      className="w-full px-6 py-3 bg-green-600 text-white rounded-lg shadow hover:bg-green-500 transition"
-                    >
-                      Add Reward
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => navigate("/student/history")}
-                      className="w-full px-6 py-3 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-500 transition"
-                    >
-                      View History
-                    </button>
-                  )}
-                </div>
+                {/* Role-specific Button */}  
+              <div className="mt-6">
+                <button
+                  onClick={() => setIsModalOpen(true)}
+                  className="w-full px-6 py-3 bg-purple-600 text-white rounded-lg shadow hover:bg-purple-500 transition"
+                >
+                  {isAdmin ? "Select Reward Type" : "View Actions"}
+                </button>
+              </div>
               </div>
             )}
           </div>
@@ -222,6 +213,7 @@ const Home: React.FC = () => {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onSelect={handleRewardSelect}
+        isAdmin={isAdmin} 
       />
     </div>
   );

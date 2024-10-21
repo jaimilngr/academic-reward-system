@@ -35,6 +35,16 @@ const IndividualReward: React.FC = () => {
       return;
     }
 
+    const provider = new ethers.BrowserProvider(window.ethereum);
+    const signer = await provider.getSigner();
+    const senderAddress = await signer.getAddress();
+
+    // Check if the recipient address is the same as the sender's address
+    if (recipientAddress.toLowerCase() === senderAddress.toLowerCase()) {
+      setMessage("You can't transfer tokens to yourself.");
+      return;
+    }
+
     if (typeof window.ethereum === 'undefined') {
       setMessage('Please install MetaMask to use this feature.');
       return;
@@ -49,12 +59,17 @@ const IndividualReward: React.FC = () => {
     setLoading(true);
 
     try {
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const signer = await provider.getSigner();
       const tokenContract = new ethers.Contract(tokenAddress, tokenABI, signer);
-      const senderAddress = await signer.getAddress();
       const balance = await tokenContract.balanceOf(senderAddress);
+      console.log(`Balance: ${ethers.formatUnits(balance, 18)}`); // Debugging line
 
+      // Check if the balance is 0
+      if (Number(balance) === 0) {
+        setMessage('You do not have enough balance to make this transfer.');
+        return;
+      }
+
+      // Check if the balance is less than the amount to transfer
       if (Number(balance) < parsedTokenAmount) {
         setMessage('Insufficient balance to distribute the specified amount.');
         return;
@@ -64,15 +79,14 @@ const IndividualReward: React.FC = () => {
       const contractBalance = await rewardSystemContract.contractBalance();
       console.log(`Contract Balance: ${ethers.formatUnits(contractBalance, 18)} tokens`);
 
-  // Transfer tokens to the reward system contract
-  const tx = await tokenContract.transfer(rewardSystemAddress, ethers.parseUnits(tokenAmount, 18));
-  await tx.wait();
-  console.log(`Transferred ${tokenAmount} tokens to the reward system contract.`);
+      // Transfer tokens to the reward system contract
+      const tx = await tokenContract.transfer(rewardSystemAddress, ethers.parseUnits(tokenAmount, 18));
+      await tx.wait();
+      console.log(`Transferred ${tokenAmount} tokens to the reward system contract.`);
 
-  // Now distribute the tokens to the recipient
-  const distributeTx = await rewardSystemContract.distributeReward(recipientAddress, ethers.parseUnits(tokenAmount, 18));
-  await distributeTx.wait();
-
+      // Now distribute the tokens to the recipient
+      const distributeTx = await rewardSystemContract.distributeReward(recipientAddress, ethers.parseUnits(tokenAmount, 18));
+      await distributeTx.wait();
 
       setMessage(`Successfully distributed ${tokenAmount} tokens to ${recipientAddress}`);
       
@@ -81,7 +95,13 @@ const IndividualReward: React.FC = () => {
       setTokenAmount('');
     } catch (error: any) {
       console.error("Distribution failed:", error);
-      setMessage(`An error occurred: ${error.message || 'Please try again.'}`);
+
+      // Check for specific error messages
+      if (error.code === 'CALL_EXCEPTION') {
+        setMessage('You do not have enough tokens or gas for this transaction.');
+      } else {
+        setMessage(`An error occurred: ${error.message || 'Please try again.'}`);
+      }
     } finally {
       setLoading(false);
     }
