@@ -54,7 +54,7 @@ contract AssignmentContract {
         assignments[assignmentId] = Assignment({
             title: title,
             rewardAmount: rewardAmount,
-            exists: true // Set exists to true
+            exists: true
         });
 
         totalAssignmentCount++; // Increment the total assignment count
